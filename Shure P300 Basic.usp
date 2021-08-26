@@ -1,0 +1,82 @@
+/*******************************************************************************************
+  SIMPL+ Module Information
+*******************************************************************************************/
+/*
+Dealer Name: Masters Voice Technology Pty Ltd
+System Name: 
+System Number: 1
+Programmer: DTL (dane@mastersvoice.tech)
+Comments: Basic module to control output volume of Shure P300
+*/
+
+/*******************************************************************************************
+  Compiler Directives
+*******************************************************************************************/
+#SYMBOL_NAME "Shure P300 Basic"
+#HINT "Just sets and gets output gain"
+#DEFINE_CONSTANT    DBGNAME "Shure P300"                        
+#CATEGORY "30" // Volume
+#DEFAULT_VOLATILE
+#ENABLE_STACK_CHECKING
+#ENABLE_TRACE
+
+#HELP_BEGIN
+   (add additional lines of help lines)
+#HELP_END
+
+/*******************************************************************************************
+  DIGITAL, ANALOG and SERIAL INPUTS and OUTPUTS
+*******************************************************************************************/
+ANALOG_INPUT Volume;
+STRING_INPUT RX$[255];
+
+ANALOG_OUTPUT Volume_FB;
+STRING_OUTPUT TX$;
+
+
+/*******************************************************************************************
+  Parameters
+*******************************************************************************************/
+INTEGER_PARAMETER _SKIP_, _SKIP_, _SKIP_, Channel;
+
+/*******************************************************************************************
+  Parameter Properties
+*******************************************************************************************/
+
+#BEGIN_PARAMETER_PROPERTIES Channel
+   propValidUnits = unitDecimal;
+   propDefaultValue = 17d;
+#END_PARAMETER_PROPERTIES
+
+
+/*******************************************************************************************
+  Event Handlers
+*******************************************************************************************/
+
+CHANGE Volume
+{
+    makestring(TX$, "< SET %i AUDIO_GAIN_HI_RES %i >", Channel, Volume);
+}
+
+CHANGE RX$
+{
+    string buf[128], matchStr[128], volStr[4];
+    buf = RX$;
+    makeString(matchStr, "< REP %i AUDIO_GAIN_HI_RES", Channel);
+    if (left(buf, 26) = matchStr){
+        volStr = mid(buf, 28, 4);
+        Volume_FB = atoi(volStr);
+    }
+}
+
+
+
+/*******************************************************************************************
+  Main()
+*******************************************************************************************/
+
+Function Main()
+{
+    WaitForInitializationComplete();
+    makeString(TX$, "< GET %i AUDIO_GAIN_HI_RES >", Channel);
+}
