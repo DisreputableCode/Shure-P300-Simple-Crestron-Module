@@ -5,15 +5,15 @@
 Dealer Name: Masters Voice Technology Pty Ltd
 System Name: 
 System Number: 1
-Programmer: DTL (dane@mastersvoice.tech)
+Programmer: DTL (dane@mastersvoice.com.au)
 Comments: Basic module to control output volume of Shure P300
 */
 
 /*******************************************************************************************
   Compiler Directives
 *******************************************************************************************/
-#SYMBOL_NAME "Shure P300 Basic"
-#HINT "Just sets and gets output gain"
+#SYMBOL_NAME "Shure P300 Channel"
+#HINT "Sets and gets channel gain/mute"
 #DEFINE_CONSTANT    DBGNAME "Shure P300"                        
 #CATEGORY "30" // Volume
 #DEFAULT_VOLATILE
@@ -27,17 +27,19 @@ Comments: Basic module to control output volume of Shure P300
 /*******************************************************************************************
   DIGITAL, ANALOG and SERIAL INPUTS and OUTPUTS
 *******************************************************************************************/
-ANALOG_INPUT Volume;
+DIGITAL_INPUT Mute_On, Mute_Off, Mute_Toggle, _SKIP_;
+ANALOG_INPUT Volume, _SKIP_;
 STRING_INPUT RX$[255];
-
-ANALOG_OUTPUT Volume_FB;
+                      
+DIGITAL_OUTPUT _SKIP_, _SKIP_, Mute_FB, _SKIP_;
+ANALOG_OUTPUT Volume_FB, _SKIP_;
 STRING_OUTPUT TX$;
 
 
 /*******************************************************************************************
   Parameters
 *******************************************************************************************/
-INTEGER_PARAMETER _SKIP_, _SKIP_, _SKIP_, Channel;
+INTEGER_PARAMETER _SKIP_, _SKIP_, _SKIP_, _SKIP_, _SKIP_, _SKIP_, _SKIP_, Channel;
 
 /*******************************************************************************************
   Parameter Properties
@@ -46,27 +48,96 @@ INTEGER_PARAMETER _SKIP_, _SKIP_, _SKIP_, Channel;
 #BEGIN_PARAMETER_PROPERTIES Channel
    propValidUnits = unitDecimal;
    propDefaultValue = 17d;
-#END_PARAMETER_PROPERTIES
+   propList = { 1d, "Dante Input 1" }, { 2d, "Dante Input 2" }, { 3d, "Dante Input 3" },
+			  { 4d, "Dante Input 4" }, { 5d, "Dante Input 5" }, { 6d, "Dante Input 6" },
+			  { 7d, "Dante Input 7" }, { 8d, "Dante Input 8" }, { 9d, "Dante Input 9" },
+			  { 10d, "Dante Input 10" }, { 11d, "Analog Input 1" }, { 12d, "Analog Input 2" },
+			  { 13d, "USB Input" }, { 14d, "Mobile Input" }, { 15d, "Dante Output 1" },
+			  { 16d, "Dante Output 2" }, { 17d, "Analog Output 1" }, { 18d, "Analog Output 2" },
+			  { 19d, "USB Output" }, { 20d, "Mobile Output" }, { 21d, "Automixer Output" },
+			  { 22d, "AEC Reference" }, { 23d, "Dante Output 3" }, { 24d, "Dante Output 4" },
+			  { 25d, "Dante Output 5" }, { 26d, "Dante Output 6" }, { 27d, "Dante Output 7" },
+			  { 28d, "Dante Output 8" };
+   #END_PARAMETER_PROPERTIES
+
+/*******************************************************************************************
+  Global Variables
+*******************************************************************************************/
+INTEGER gImute;
+
+
+/*******************************************************************************************
+  Functions
+*******************************************************************************************/
+function fnUpdateMute()
+{
+	if (gImute) makestring(TX$, "< SET %02i AUDIO_MUTE ON >", Channel);
+	else makestring(TX$, "< SET %02i AUDIO_MUTE OFF >", Channel);
+}
 
 
 /*******************************************************************************************
   Event Handlers
 *******************************************************************************************/
+PUSH Mute_On
+{
+	gImute = 1;
+	fnUpdateMute();
+}
+
+PUSH Mute_Off
+{
+	gImute = 0;
+	fnUpdateMute();
+}
+
+PUSH Mute_Toggle
+{
+	gImute = !gImute;
+	fnUpdateMute();
+}
 
 CHANGE Volume
 {
-    makestring(TX$, "< SET %i AUDIO_GAIN_HI_RES %i >", Channel, Volume);
+	integer scaledVolume;
+
+	scaledVolume = (Volume * 1400) / 65535; // scale volume
+    makestring(TX$, "< SET %02i AUDIO_GAIN_HI_RES %04i >", Channel, scaledVolume);
 }
 
 CHANGE RX$
 {
-    string buf[128], matchStr[128], volStr[4];
+    string buf[128], matchStr[128], valStr[4];
     buf = RX$;
-    makeString(matchStr, "< REP %i AUDIO_GAIN_HI_RES", Channel);
-    if (left(buf, 26) = matchStr){
-        volStr = mid(buf, 28, 4);
-        Volume_FB = atoi(volStr);
-    }
+	if (find("AUDIO_GAIN_HI_RES", buf))
+	{
+    	makeString(matchStr, "< REP %02i AUDIO_GAIN_HI_RES", Channel);
+    	if (left(buf, len(matchStr)) = matchStr)
+		{
+        	valStr = mid(buf, 28, 4);
+        	Volume_FB = (atoi(valStr) * 65535) / 1400;
+    	}
+	}
+	else if (find("AUDIO_MUTE", buf))
+	{
+     	makeString(matchStr, "< REP %02i AUDIO_MUTE", Channel);
+
+    	if (left(buf, len(matchStr)) = matchStr)
+		{
+        	valStr = mid(buf, 21, 3);
+			trace("%s", valStr);
+        	if (valStr = "ON ")
+			{
+				gImute = 1;
+				Mute_FB = 1;
+			}
+			else if (valStr = "OFF")
+			{
+				gImute = 0;
+				Mute_FB = 0;
+			}
+	    }
+	}
 }
 
 
@@ -78,5 +149,7 @@ CHANGE RX$
 Function Main()
 {
     WaitForInitializationComplete();
-    makeString(TX$, "< GET %i AUDIO_GAIN_HI_RES >", Channel);
+    makeString(TX$, "< GET %02i AUDIO_GAIN_HI_RES >", Channel);
+	makeString(TX$, "< GET %02i AUDIO_MUTE >", Channel);
+
 }
